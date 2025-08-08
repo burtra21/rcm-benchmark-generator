@@ -125,7 +125,7 @@ class RCMBenchmarkReportGenerator:
         # Current State Analysis
         story.append(Paragraph("Current State Analysis", self.styles['CustomSubtitle']))
         
-      # Create data table
+        # Create data table
         data = [
             ['Metric', 'Current State', 'Industry Best Practice', 'Your Opportunity'],
             ['RCM Staff Size', f"{metrics['estimated_rcm_staff']}", f"{metrics['estimated_rcm_staff']}", '-'],

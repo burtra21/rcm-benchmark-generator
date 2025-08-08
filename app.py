@@ -1,15 +1,18 @@
 # app.py
-# Web interface for enhanced RCM benchmark report generator with real data integration
+# Complete RCM Benchmark Report Generator Web Application with Clay Integration
 
-from fastapi import FastAPI, Form, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, FileResponse
+from datetime import datetime
 import os
+
+# Import your enhanced report generator with data
 from generate_report_enhanced_v2 import DataEnhancedRCMReportGenerator
 
-# Create the web application
-app = FastAPI()
+# Create FastAPI app
+app = FastAPI(title="RCM Benchmark Report Generator")
 
-# Create enhanced HTML form with state selection
+# HTML form for the web interface
 @app.get("/", response_class=HTMLResponse)
 async def show_form():
     return """
@@ -239,7 +242,7 @@ async def show_form():
                             <option value="WV">West Virginia</option>
                             <option value="WI">Wisconsin</option>
                             <option value="WY">Wyoming</option>
-                         </select>
+                        </select>
                     </div>
                 </div>
                 
@@ -265,24 +268,24 @@ async def show_form():
                 <p>Powered by Frost-Arnett Company | Healthcare Excellence Since 1893</p>
             </div>
         </div>
-                
-                <script>
-                    function showLoading() {
-                        document.getElementById('loading').style.display = 'block';
-                    }
-                </script>
-            </body>
-            </html>
-            """
+        
+        <script>
+            function showLoading() {
+                document.getElementById('loading').style.display = 'block';
+            }
+        </script>
+    </body>
+    </html>
+    """
 
-# Handle form submission - now using Enhanced generator with real data
+# Handle form submission - using Enhanced generator with real data
 @app.post("/generate")
 async def generate_report(
     hospital_name: str = Form(...),
     hospital_beds: int = Form(...),
     recipient_name: str = Form(...),
     recipient_email: str = Form(...),
-    state: str = Form(...)  # Added state parameter
+    state: str = Form(...)
 ):
     try:
         # Create enhanced generator with data sources
@@ -294,7 +297,7 @@ async def generate_report(
             hospital_beds=hospital_beds,
             recipient_name=recipient_name,
             recipient_email=recipient_email,
-            state=state  # Pass state to generator
+            state=state
         )
         
         # Return the file for download
@@ -307,17 +310,17 @@ async def generate_report(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Add a health check endpoint
+# Health check endpoint
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy", 
         "service": "Enhanced RCM Benchmark Report Generator", 
         "version": "3.0",
-        "features": ["real_data", "charts", "roi_analysis"]
+        "features": ["real_data", "charts", "roi_analysis", "clay_integration"]
     }
 
-# Add a simple API endpoint for N8N integration
+# API endpoint for N8N integration
 @app.post("/api/generate")
 async def api_generate_report(
     hospital_name: str = Form(...),
@@ -351,7 +354,109 @@ async def api_generate_report(
             "error": str(e)
         }
 
-# Webhook endpoint for N8N integration
+# Webhook endpoint for N8N integration with Clay
+@app.post("/webhook/send-to-clay")
+async def send_to_clay(request: Request):
+    """Generate report and send all data to Clay for email delivery"""
+    
+    # Get form data
+    form_data = await request.form()
+    
+    hospital_name = form_data.get("hospital_name")
+    hospital_beds = int(form_data.get("hospital_beds"))
+    recipient_name = form_data.get("recipient_name")
+    recipient_email = form_data.get("recipient_email")
+    state = form_data.get("state")
+    original_subject = form_data.get("original_subject", f"{hospital_name} RCM Staffing Analysis")
+    
+    # Generate report
+    generator = DataEnhancedRCMReportGenerator()
+    filename = generator.generate_report(
+        hospital_name=hospital_name,
+        hospital_beds=hospital_beds,
+        recipient_name=recipient_name,
+        recipient_email=recipient_email,
+        state=state
+    )
+    
+    # Get metrics from the generator
+    metrics = generator.calculate_metrics(hospital_beds, hospital_name)
+    
+    # Create download URL
+    report_url = f"https://web-production-8b50.up.railway.app/reports/{filename}"
+    
+    # Format currency for email
+    def format_currency(amount):
+        return f"{int(amount):,}"
+    
+    # Generate email HTML (using Template 1 - Immediate Response)
+    first_name = recipient_name.split(' ')[0]
+    email_html = f"""
+    <p>Hi {first_name},</p>
+    
+    <p>Wow, that was fast! I just finished analyzing {hospital_name}'s specific situation.</p>
+    
+    <p>The report shows you're likely spending <strong>${format_currency(metrics['current_turnover_cost'])}</strong> annually on RCM turnover costs alone.</p>
+    
+    <p>But here's the good news: By implementing the strategies in your report, {hospital_name} could save <strong>${format_currency(metrics['potential_savings'])}</strong> every year.</p>
+    
+    <p><a href="{report_url}" style="background-color: #1e3a8a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; font-weight: bold;">DOWNLOAD YOUR PERSONALIZED REPORT</a></p>
+    
+    <p>The report includes:<br>
+    ✓ Your specific turnover cost analysis<br>
+    ✓ ROI timeline showing {metrics['break_even_months']}-month payback<br>
+    ✓ Implementation roadmap for your {hospital_beds}-bed facility<br>
+    ✓ {state} market salary data</p>
+    
+    <p>Quick question - are you free for a 15-minute call tomorrow to discuss the fastest path to these savings?</p>
+    
+    <p>Best,<br>
+    Mike Patterson<br>
+    VP Healthcare Solutions<br>
+    Frost-Arnett Company<br>
+    📱 312-555-0100 (mobile)</p>
+    """
+    
+    # Prepare Clay payload
+    clay_payload = {
+        "hospital_name": hospital_name,
+        "hospital_beds": hospital_beds,
+        "recipient_name": recipient_name,
+        "recipient_email": recipient_email,
+        "state": state,
+        "original_subject": original_subject,
+        "report_url": report_url,
+        "potential_savings": metrics['potential_savings'],
+        "current_turnover_cost": metrics['current_turnover_cost'],
+        "break_even_months": metrics['break_even_months'],
+        "savings_per_bed": metrics['savings_per_bed'],
+        "report_generated_at": datetime.now().isoformat(),
+        "email_html": email_html,
+        "email_subject": f"Re: {original_subject} - Your RCM Benchmark Report is Ready",
+        "estimated_rcm_staff": metrics['estimated_rcm_staff'],
+        "staff_turning_over_now": metrics['staff_turning_over_now'],
+        "cost_per_bed": metrics['cost_per_bed']
+    }
+    
+    # Send to Clay webhook
+    import requests
+    clay_webhook_url = "https://api.clay.com/v3/sources/webhook/pull-in-data-from-a-webhook-7c4d6c32-6127-42df-958a-bf6c54f13b71"
+    
+    try:
+        response = requests.post(clay_webhook_url, json=clay_payload, timeout=10)
+        clay_status = "success" if response.status_code == 200 else f"error: {response.status_code}"
+    except Exception as e:
+        clay_status = f"error: {str(e)}"
+    
+    return {
+        "status": "success",
+        "report_generated": filename,
+        "report_url": report_url,
+        "clay_webhook_status": clay_status,
+        "metrics": metrics
+    }
+
+# Original webhook endpoint (keeping for compatibility)
 @app.post("/webhook/staffing-reply")
 async def handle_staffing_reply(
     hospital_name: str = Form(...),
@@ -373,8 +478,6 @@ async def handle_staffing_reply(
             state=state
         )
         
-        # In production, you'd email this report
-        # For now, just return success
         return {
             "status": "success",
             "message": "Report generated and ready for delivery",
@@ -388,7 +491,26 @@ async def handle_staffing_reply(
             "error": str(e)
         }
 
-# Endpoint to check available data sources
+# Serve generated PDF reports
+@app.get("/reports/{filename}")
+async def download_report(filename: str):
+    """Serve generated PDF reports"""
+    # Security check - only allow PDF files
+    if not filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+    
+    # Check if file exists
+    if not os.path.exists(filename):
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    return FileResponse(
+        filename,
+        media_type='application/pdf',
+        filename=filename,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+# Check available data sources
 @app.get("/api/data-sources")
 async def get_data_sources():
     """Show what data sources are integrated"""
